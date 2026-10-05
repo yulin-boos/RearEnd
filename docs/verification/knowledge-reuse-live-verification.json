@@ -1,0 +1,45 @@
+{
+  "context": "synthetic tomato recognition context, one copied public entry",
+  "formal_database_modified": false,
+  "deepseek_api_requests": 0,
+  "direct_minimum_match": 0.85,
+  "status": "reused",
+  "source": "knowledge",
+  "reuse_score": 0.88,
+  "entry_matched": true,
+  "jev_model": "jev-1.13.0",
+  "conditions_preserved": true,
+  "uncertainty_preserved": true,
+  "history_saved": true,
+  "matches": [
+    {
+      "match_0": 0.97,
+      "direct_0": 0.88
+    }
+  ],
+  "generation_attempts": 0,
+  "drug_dose_request_reused": false,
+  "drug_dose_match": {
+    "match_0": 0.18,
+    "direct_0": 0.05
+  },
+  "drug_dose_lookup_error": null,
+  "temporary_knowledge_count": 1,
+  "controlled_faq": {
+    "status": "reused",
+    "source": "knowledge",
+    "reuse_score": 0.87,
+    "entry_matched": true,
+    "jev_model": "jev-1.13.0",
+    "conditions_preserved": true,
+    "uncertainty_preserved": true,
+    "history_saved": true,
+    "generation_attempts": 0
+  },
+  "controlled_faq_match": {
+    "match_0": 0.91,
+    "match_1": 0.03,
+    "direct_0": 0.87,
+    "direct_1": 0.04
+  }
+}

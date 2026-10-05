@@ -1,0 +1,17 @@
+{
+  "source": "synthetic observation guidance",
+  "knowledge_status": "stored",
+  "decision": {
+    "model": "jev-1.13.0",
+    "store": true,
+    "value_probability": 0.85,
+    "grounded_probability": 0.92,
+    "private_data_probability": 0.03,
+    "focus": "diagnosis",
+    "focus_confidence": 0.85
+  },
+  "knowledge_error": null,
+  "db": "temporary",
+  "query_hits": 1,
+  "reference_hits": 1
+}

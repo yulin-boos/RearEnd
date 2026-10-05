@@ -1,0 +1,35 @@
+{
+  "leaf": [
+    "a close-up photo of a plant leaf",
+    "a photo of a healthy green plant leaf",
+    "a photo of a diseased plant leaf with spots",
+    "a photo of a yellow or brown plant leaf",
+    "a photo of a dried plant leaf"
+  ],
+  "non_leaf": {
+    "person": "a photo of a person or a human face",
+    "hand": "a close-up photo of a human hand",
+    "animal": "a photo of an animal, a dog or a cat",
+    "bird": "a photo of a bird",
+    "insect": "a close-up photo of an insect",
+    "vehicle": "a photo of a car, a bus or a bicycle",
+    "building": "a photo of a building or a house",
+    "street": "a photo of a street or a city",
+    "room": "a photo of a room with furniture",
+    "electronics": "a photo of a computer, a phone or a screen",
+    "document": "a photo of a document, printed text or a screenshot",
+    "food": "a photo of food on a plate",
+    "fruit": "a close-up photo of a fruit, an apple or a tomato",
+    "vegetable": "a photo of vegetables",
+    "flower": "a close-up photo of a flower",
+    "tree": "a photo of an entire tree or a forest",
+    "grass": "a photo of grass or a lawn",
+    "landscape": "a photo of a landscape, a mountain or the sky",
+    "soil": "a photo of soil, rocks or a tree trunk",
+    "green_object": "a photo of a green plastic object or a green toy",
+    "clothing": "a photo of clothing or fabric",
+    "drawing": "a drawing, a cartoon or a painting",
+    "blank": "a blank image of a solid color",
+    "noise": "an image of random noise or blurry abstract shapes"
+  }
+}

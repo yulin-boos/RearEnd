@@ -1,0 +1,62 @@
+[
+  {
+    "name": "leaf_Apple___healthy_0.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Apple___healthy/0055dd26-23a7-4415-ac61-e0b44ebfaf80___RS_HL%205672.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "leaf_Apple___healthy_1.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Apple___healthy/00907d8b-6ae6-4306-bfd7-d54471981a86___RS_HL%205709.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "leaf_Apple___Apple_scab_0.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Apple___Apple_scab/00075aa8-d81a-4184-8541-b692b78d398a___FREC_Scab%203335.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "leaf_Apple___Apple_scab_1.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Apple___Apple_scab/01a66316-0e98-4d3b-a56f-d78752cd043f___FREC_Scab%203003.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "leaf_Corn_(maize)___Common_rust__0.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Corn_(maize)___Common_rust_/RS_Rust%201563.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "leaf_Corn_(maize)___Common_rust__1.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Corn_(maize)___Common_rust_/RS_Rust%201564.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "leaf_Tomato___Early_blight_0.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Tomato___Early_blight/0012b9d2-2130-4a06-a834-b1f3af34f57e___RS_Erly.B%208389.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "leaf_Tomato___Early_blight_1.jpg",
+    "url": "https://raw.githubusercontent.com/spMohanty/PlantVillage-Dataset/master/raw/color/Tomato___Early_blight/0034a551-9512-44e5-ba6c-827f85ecc688___RS_Erly.B%209432.JPG",
+    "expected_leaf": true
+  },
+  {
+    "name": "nonleaf_bus.jpg",
+    "url": "https://raw.githubusercontent.com/ultralytics/ultralytics/main/ultralytics/assets/bus.jpg",
+    "expected_leaf": false
+  },
+  {
+    "name": "nonleaf_people.jpg",
+    "url": "https://raw.githubusercontent.com/ultralytics/ultralytics/main/ultralytics/assets/zidane.jpg",
+    "expected_leaf": false
+  },
+  {
+    "name": "nonleaf_dog.jpg",
+    "url": "https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg",
+    "expected_leaf": false
+  },
+  {
+    "name": "nonleaf_parrots.png",
+    "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/hub/parrots.png",
+    "expected_leaf": false
+  }
+]
