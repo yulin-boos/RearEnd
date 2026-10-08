@@ -9,7 +9,7 @@ from .images import cleanup_results, decode_image, save_result_image
 
 
 def perform_recognition(settings: Settings, data: bytes, filename: str, threshold: float,
-                        top_k: int, save_result: bool, service, chat) -> RecognitionResponse:
+                        top_k: int, save_result: bool, service, chat, user_id: str | None = None) -> RecognitionResponse:
     started = perf_counter()
     image = decode_image(data, settings.max_image_pixels)
     leaf_check = service.check_leaf(image)
@@ -37,5 +37,10 @@ def perform_recognition(settings: Settings, data: bytes, filename: str, threshol
         top_prediction=best, predictions=predictions[:top_k], inference_ms=inference_ms,
         elapsed_ms=round((perf_counter() - started) * 1000, 3), result_image_url=result_url,
     )
-    chat.seed(result, predictions)
+    try:
+        chat.seed(result, predictions, user_id, top_k)
+    except Exception:
+        if result_url:
+            (settings.result_dir / f"{request_id}.jpg").unlink(missing_ok=True)
+        raise
     return result

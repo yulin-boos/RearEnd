@@ -6,8 +6,9 @@ from uuid import uuid4
 
 from starlette.concurrency import run_in_threadpool
 
-from Common.errors import ChatError
+from Common.errors import ChatError, DatabaseError
 from Chat.store import ChatStore
+from Chat.mysql_store import MySQLChatStore
 from Common.config import Settings
 from Chat.deepseek import DeepSeekClient
 from Jev.guard import JevGuard
@@ -36,12 +37,14 @@ GENERAL_SYSTEM_PROMPT = """你是中文植物病虫害咨询助手。
 
 
 class ChatService:
-    def __init__(self, settings: Settings, client: DeepSeekClient | None = None, guard: JevGuard | None = None):
+    def __init__(self, settings: Settings, client: DeepSeekClient | None = None, guard: JevGuard | None = None, database=None):
+        if settings.database_backend == "mysql" and database is None:
+            raise ValueError("MySQL 模式需要传入共享数据库连接池")
         self.settings = settings
         self.client = client or DeepSeekClient(settings)
         self.guard = guard or JevGuard(settings)
-        self.knowledge = KnowledgeService(settings, self.client, self.guard)
-        self.store = ChatStore(settings.chat_db_path, settings.chat_session_ttl_seconds, settings.chat_history_turns)
+        self.knowledge = KnowledgeService(settings, self.client, self.guard, database)
+        self.store = MySQLChatStore(database, settings) if database else ChatStore(settings.chat_db_path, settings.chat_session_ttl_seconds, settings.chat_history_turns)
         self.locks = WeakValueDictionary()
         self.slots = asyncio.Semaphore(2)
 
@@ -55,7 +58,7 @@ class ChatService:
         finally:
             await self.guard.close()
 
-    def seed(self, result: RecognitionResponse, candidates: list[Prediction]):
+    def seed(self, result: RecognitionResponse, candidates: list[Prediction], user_id: str | None = None, requested_top_k=None):
         context = {
             "recognition_id": result.request_id,
             "source": "YOLO plant disease classification",
@@ -66,24 +69,34 @@ class ChatService:
             "top_prediction": result.top_prediction.model_dump(),
             "candidates": [candidate.model_dump() for candidate in candidates[:self.settings.chat_context_top_k]],
         }
-        self.store.create(result.request_id, context)
+        self.store.create_recognition(result, candidates, context, user_id, requested_top_k)
 
-    def create_general(self) -> str:
+    def create_general(self, user_id: str | None = None) -> str:
         identifier = uuid4().hex
         self.store.create(identifier, {
             "recognition_id": identifier, "conversation_type": "general",
             "source": "user plant-health text consultation", "image_available": False,
             "candidates": [],
-        })
+        }, user_id)
         return identifier
 
-    async def reply(self, recognition_id: str, question: str | None = None) -> ChatReply:
+    async def finish_turn(self, identifier, revision, activity):
+        try:
+            await run_in_threadpool(self.store.finish_turn, identifier, revision, activity)
+        except DatabaseError:
+            # The accepted question/reply pair has already committed. Optional
+            # extraction metadata must not turn that successful reply into an error.
+            activity.error_code = activity.error_code or "chat_metadata_write_failed"
+
+    async def reply(self, recognition_id: str, question: str | None = None, user_id: str | None = None) -> ChatReply:
         lock = self.locks.setdefault(recognition_id, asyncio.Lock())
         if lock.locked():
+            # Only the owner may learn that a private conversation is busy.
+            await run_in_threadpool(self.store.get, recognition_id, user_id)
             raise ChatError(409, "chat_busy", "这段对话正在生成回复，请等待完成后再发送。")
         async with lock:
             started = perf_counter()
-            session = await run_in_threadpool(self.store.get, recognition_id)
+            session = await run_in_threadpool(self.store.get, recognition_id, user_id)
             general = session["context"].get("conversation_type") == "general"
             question = question or ("请先询问我的植物和症状，以便开始植物健康咨询。" if general else OPENING_QUESTION)
             async with self.slots:
@@ -102,10 +115,15 @@ class ChatService:
                         references = [reference for reference in references if reference.id != entry.id]
                         retrieval_error = "knowledge_preset_rejected"
                     else:
-                        length = await run_in_threadpool(self.store.append_turn, recognition_id, session["revision"], question, preset)
+                        metadata = {"source": "knowledge", "model": "knowledge", "source_ids": [entry.id],
+                                    "reuse_probability": selection.direct_probability,
+                                    "guard": ChatChecks(question=question_check, reply=reply_check).model_dump(),
+                                    "elapsed_ms": round((perf_counter() - started) * 1000, 3)}
+                        length = await run_in_threadpool(self.store.append_turn, recognition_id, session["revision"], question, preset, user_id, metadata)
                         knowledge = KnowledgeActivity(status="reused", entry_id=entry.id, source_ids=[entry.id],
                             reuse_probability=selection.direct_probability, decision=reply_check.knowledge_decision,
                             error_code=reply_check.knowledge_error, retrieval_error_code=retrieval_error)
+                        await self.finish_turn(recognition_id, session["revision"], knowledge)
                         return ChatReply(recognition_id=recognition_id, model="knowledge", source="knowledge", reply=preset,
                             history_length=length, elapsed_ms=round((perf_counter() - started) * 1000, 3),
                             guard=ChatChecks(question=question_check, reply=reply_check), knowledge=knowledge)
@@ -118,22 +136,26 @@ class ChatService:
                 messages = [{"role": "system", "content": system}, *session["history"], {"role": "user", "content": question}]
                 answer = await self.client.complete(messages)
                 reply_check = await self.guard.check_reply(session["context"], session["history"], question, answer["reply"], references)
-                length = await run_in_threadpool(self.store.append_turn, recognition_id, session["revision"], question, answer["reply"])
+                metadata = {**answer, "source": "deepseek", "model": self.settings.deepseek_model,
+                            "source_ids": [entry.id for entry in references],
+                            "guard": ChatChecks(question=question_check, reply=reply_check).model_dump()}
+                length = await run_in_threadpool(self.store.append_turn, recognition_id, session["revision"], question, answer["reply"], user_id, metadata)
                 knowledge = await self.knowledge.capture(session["context"], session["history"], question, answer,
                                                          reply_check, recognition_id, references)
                 knowledge.retrieval_error_code = retrieval_error
+                await self.finish_turn(recognition_id, session["revision"], knowledge)
             return ChatReply(recognition_id=recognition_id, model=self.settings.deepseek_model,
                              history_length=length, elapsed_ms=round((perf_counter() - started) * 1000, 3),
                              guard=ChatChecks(question=question_check, reply=reply_check), knowledge=knowledge, **answer)
 
-    async def analyze(self, recognition_id: str, enabled: bool) -> RecognitionChat:
+    async def analyze(self, recognition_id: str, enabled: bool, user_id: str | None = None) -> RecognitionChat:
         state = RecognitionChat(recognition_id=recognition_id, configured=self.client.configured,
                                 guard_configured=self.guard.configured,
                                 model=self.settings.deepseek_model, status="skipped")
         if not enabled:
             return state
         try:
-            answer = await self.reply(recognition_id)
+            answer = await self.reply(recognition_id, user_id=user_id)
             state.status = "ready"
             state.reply = answer.reply
             state.elapsed_ms = answer.elapsed_ms

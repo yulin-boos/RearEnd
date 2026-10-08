@@ -283,9 +283,9 @@ def test_stale_conversation_never_creates_shared_knowledge(settings, monkeypatch
         data = recognize(client, auto_analyze="false").json()
         store = client.app.state.chat.store
         original = store.append_turn
-        def changed(identifier, revision, question, reply):
-            original(identifier, revision, "另一个已完成的提问", "另一个已完成的回复")
-            return original(identifier, revision, question, reply)
+        def changed(identifier, revision, question, reply, user_id=None, metadata=None):
+            original(identifier, revision, "另一个已完成的提问", "另一个已完成的回复", user_id)
+            return original(identifier, revision, question, reply, user_id, metadata)
         monkeypatch.setattr(store, "append_turn", changed)
         response = client.post("/api/v1/chat", json={"recognition_id": data["request_id"], "message": "苹果叶片斑点如何管理？"})
         assert response.status_code == 409 and response.json()["error"]["code"] == "conversation_changed"

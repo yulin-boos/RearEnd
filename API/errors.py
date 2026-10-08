@@ -5,17 +5,21 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from Common.errors import ChatError
+from Common.errors import ChatError, UserError, DatabaseError
 
 logger = logging.getLogger(__name__)
 
 
 def register_error_handlers(application: FastAPI):
+    @application.exception_handler(DatabaseError)
+    async def database_error(request: Request, exc: DatabaseError):
+        return JSONResponse({"error": {"code": "database_unavailable", "message": str(exc)}}, status_code=503)
+
     @application.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):
         codes = {400: "bad_request", 404: "not_found", 413: "payload_too_large", 415: "unsupported_image", 503: "not_ready"}
         error = exc.detail if isinstance(exc.detail, dict) else {"code": codes.get(exc.status_code, "http_error"), "message": exc.detail}
-        return JSONResponse({"error": error}, status_code=exc.status_code)
+        return JSONResponse({"error": error}, status_code=exc.status_code, headers=exc.headers)
 
 
     @application.exception_handler(RequestValidationError)
@@ -27,6 +31,14 @@ def register_error_handlers(application: FastAPI):
     @application.exception_handler(ChatError)
     async def chat_error(request: Request, exc: ChatError):
         return JSONResponse({"error": {"code": exc.code, "message": exc.message}}, status_code=exc.status_code)
+
+    @application.exception_handler(UserError)
+    async def user_error(request: Request, exc: UserError):
+        headers = {"Cache-Control": "no-store"}
+        if exc.status_code == 401:
+            headers["WWW-Authenticate"] = "Bearer"
+        return JSONResponse({"error": {"code": exc.code, "message": exc.message}},
+                            status_code=exc.status_code, headers=headers)
 
 
     @application.exception_handler(Exception)

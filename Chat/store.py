@@ -22,38 +22,54 @@ class ChatStore:
             with connection:
                 yield connection
 
-    def initialize(self):
+    def migrate(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute("""CREATE TABLE IF NOT EXISTS conversations (
                 recognition_id TEXT PRIMARY KEY,
                 context TEXT NOT NULL,
                 history TEXT NOT NULL DEFAULT '[]',
                 revision INTEGER NOT NULL DEFAULT 0,
-                expires_at REAL NOT NULL
+                expires_at REAL NOT NULL,
+                user_id TEXT
             )""")
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(conversations)")}
+            if "user_id" not in columns:
+                connection.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT")
+            connection.execute("CREATE INDEX IF NOT EXISTS conversations_user ON conversations(user_id)")
+
+    def initialize(self):
+        self.migrate()
+        with self.connection() as connection:
             connection.execute("DELETE FROM conversations WHERE expires_at <= ?", (time.time(),))
 
-    def create(self, recognition_id: str, context: dict):
+    def create(self, recognition_id: str, context: dict, user_id: str | None = None):
         with self.connection() as connection:
             connection.execute("DELETE FROM conversations WHERE expires_at <= ?", (time.time(),))
             connection.execute(
-                "INSERT INTO conversations (recognition_id, context, expires_at) VALUES (?, ?, ?)",
-                (recognition_id, json.dumps(context, ensure_ascii=False), time.time() + self.ttl_seconds),
+                "INSERT INTO conversations (recognition_id, context, expires_at, user_id) VALUES (?, ?, ?, ?)",
+                (recognition_id, json.dumps(context, ensure_ascii=False), time.time() + self.ttl_seconds, user_id),
             )
 
-    def get(self, recognition_id: str) -> dict:
+    def get(self, recognition_id: str, user_id: str | None = None) -> dict:
         with self.connection() as connection:
             row = connection.execute("SELECT * FROM conversations WHERE recognition_id = ?", (recognition_id,)).fetchone()
-        if row is None or row["expires_at"] <= time.time():
+        if row is None or row["expires_at"] <= time.time() or (row["user_id"] is not None and row["user_id"] != user_id):
             raise ChatError(404, "conversation_not_found", "识别记录不存在或对话已过期，请重新上传叶片图片。")
         return {"context": json.loads(row["context"]), "history": json.loads(row["history"]), "revision": row["revision"]}
 
-    def append_turn(self, recognition_id: str, revision: int, question: str, reply: str) -> int:
+    def create_recognition(self, result, candidates, context, user_id=None, requested_top_k=None):
+        self.create(result.request_id, context, user_id)
+
+    def finish_turn(self, identifier, revision, activity):
+        pass
+
+    def append_turn(self, recognition_id: str, revision: int, question: str, reply: str, user_id: str | None = None, metadata=None) -> int:
         with self.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM conversations WHERE recognition_id = ?", (recognition_id,)).fetchone()
-            if row is None or row["expires_at"] <= time.time():
+            if row is None or row["expires_at"] <= time.time() or (row["user_id"] is not None and row["user_id"] != user_id):
                 raise ChatError(404, "conversation_not_found", "对话已过期，请重新上传叶片图片。")
             if row["revision"] != revision:
                 raise ChatError(409, "conversation_changed", "这段对话已更新，请稍后重新发送。")

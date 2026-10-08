@@ -16,5 +16,5 @@ if __name__ == "__main__":
     uvicorn.run("API.main:app", host=args.host or settings.host,
                 port=args.port if args.port is not None else settings.port, reload=args.reload,
                 reload_dirs=[str(PROJECT_ROOT / directory) for directory in
-                             ("API", "Chat", "Common", "Jev", "Knowledge", "Visual/recognition")]
+                             ("API", "Chat", "Common", "Jev", "Knowledge", "Shop", "Users", "Visual/recognition")]
                 if args.reload else None)

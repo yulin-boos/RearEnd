@@ -9,8 +9,12 @@ router = APIRouter()
 def health(request: Request):
     settings = request.app.state.settings
     service = get_service(request)
+    database = getattr(request.app.state, "database", None)
+    if database:
+        database.check()
     return {"status": "ok", "model_loaded": True, "model": settings.model_path.name,
             "task": service.task, "class_count": len(service.classes),
+            "storage": {"backend": settings.database_backend, "connected": True},
             "device": settings.device, "postprocessor": service.postprocessor,
             "leaf_check": {"enabled": True, "model": settings.leaf_model_path.name,
                            "device": settings.leaf_device,
@@ -26,5 +30,4 @@ def health(request: Request):
                           "minimum_match": settings.knowledge_min_match,
                           "direct_enabled": settings.knowledge_direct_enabled,
                           "direct_minimum_match": settings.knowledge_direct_min_match}}
-
 

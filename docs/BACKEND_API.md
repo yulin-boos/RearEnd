@@ -1,5 +1,7 @@
 # 病虫害图片识别后端
 
+用户注册、登录、退出、个人资料及登录后聊天归属规则见 [用户接口说明](USERS_API.md)。
+
 后端已按功能拆分到 `RearEnd/API`、`Chat`、`Jev`、`Knowledge`、`Common` 和 `Visual/recognition`。完整目录说明和统一启动方法见 [后端目录说明](../README.md)。启动、依赖安装和测试统一在 `RearEnd` 根目录执行。
 
 当前使用 `model/best.pt`：YOLO11 图片分类模型，训练输入尺寸为 **224×224**，支持 **38 个植物病害、叶螨危害及健康类别**。接口先检查叶片并识别病害，再结合识别结果分析和对话：优先复用适用的已有问答，否则由 DeepSeek 回复。TypeSafe Jev 检查问题、知识适用性和最终回复，只放行植物病因、症状及防治相关的交流。
@@ -47,6 +49,9 @@ TYPESAFE_TIMEOUT_SECONDS=15
 JEV_MIN_RELEVANCE=0.8
 JEV_MAX_VIOLATION=0.2
 CHAT_DB_PATH=storage/chat.sqlite3
+DATABASE_BACKEND=mysql
+DB_NAME=plant_health
+DB_USER=plant_health_app
 CHAT_SESSION_TTL_SECONDS=86400
 CHAT_HISTORY_TURNS=10
 CHAT_CONTEXT_TOP_K=5
@@ -74,7 +79,7 @@ KNOWLEDGE_DIRECT_MIN_MATCH=0.85
 
 DeepSeek 或 Jev 调用失败不会丢掉识别结果：识别接口仍返回 200，并在 `chat.status` 和 `chat.error` 中给出原因。追问接口按情况返回 503（未配置、密钥/余额问题）、429（频率限制）、504（超时）或 502（上游/连接问题）。不会把上游原始报错或密钥回传给网页。失败或被拦截的对话轮次不写入历史，可以重试。
 
-上下文与历史保存在 `Visual/storage/chat.sqlite3`，后端重启后仍可凭原 `request_id` 继续对话；默认保留最近 10 个完整轮次，每次成功回复延长 24 小时有效期。过期记录在启动或创建新识别记录时清理，过期/不存在的对话返回 404。每段对话同时只生成一个回复，重复并发请求返回 409；跨进程修改通过版本校验避免覆盖历史。
+上下文与历史保存在 MySQL `plant_health` 的 `conversations`、`chat_messages` 表，后端重启后仍可凭原 `request_id` 继续对话。会话有效期内保存逐条历史，模型上下文默认读取最近 10 个完整轮次，每次成功回复延长 24 小时有效期。过期记录在启动或创建新会话时清理，过期/不存在的对话返回 404。每段对话同时只生成一个回复，重复并发请求返回 409；跨进程修改通过行锁与版本校验避免覆盖历史。SQL、令牌及连接密码不会出现在接口响应中，数据库不可用返回 503 `database_unavailable`。
 
 也可以运行 `start.ps1`；开发时使用 `start.ps1 -Reload`。两种方式都会读取 `Visual/.env` 中的 HOST 和 PORT。每个进程在启动时加载一次模型，推理在工作线程内执行，同一模型的预测通过锁串行处理。
 
@@ -102,7 +107,7 @@ Jev 收到服务端保存的识别结果、最近 3 个对话轮次（每条历�
 
 ## 每轮对话的知识录入与查询
 
-会话历史用于多轮续聊，仍保存在 `Visual/storage/chat.sqlite3`。Jev 判断的是这轮内容是否值得新增到长期知识库 `Visual/storage/knowledge.sqlite3`；知识库保存通用问答，不保存原图、联系方式或可识别的私人经历。知识条目不跟随会话的 24 小时有效期过期，后端重启后仍可查询。
+会话历史用于多轮续聊，保存在 MySQL `chat_messages`。Jev 判断这轮内容是否值得新增到同库的 `knowledge_entries`，来源及复用关联保存在 `message_knowledge_links`。知识库保存通用问答，不保存原图、联系方式或可识别的私人经历。知识条目不跟随会话的 24 小时有效期过期，后端重启后仍可查询。
 
 新生成的回复通过话题检查后：
 
@@ -113,7 +118,7 @@ Jev 收到服务端保存的识别结果、最近 3 个对话轮次（每条历�
 
 问候、重复内容、单纯请求补充信息、裸类别/置信度或未经确认的个案诊断不应当作知识保存。输出被截断、缺少判断字段、整理格式无效或复核失败时不写入。整理、复核或写库失败不影响已经通过话题检查的回复，`knowledge.status=error` 和 `error_code` 给出阶段原因；正常续聊历史仍保存。
 
-用户提问时，先使用 SQLite FTS5 检索中文字符对和英文单词，再由 Jev 检查候选知识与当前作物、症状和问题是否匹配。一次请求分别判断“可供参考”和“可直接完整回答”：
+用户提问时，先使用 MySQL ngram 全文索引检索，短词或无有效全文词元时使用转义后的参数化 LIKE 兜底，再由 Jev 检查候选知识与当前作物、症状和问题是否匹配。一次请求分别判断“可供参考”和“可直接完整回答”：
 
 匹配使用 [TypeSafe API](https://docs.typesafe.ai/api) 的 Noul 判断，并用 `criteria.true` / `criteria.false` 明确直接复用与重新生成的条件。
 

@@ -11,6 +11,8 @@ from Chat.deepseek import DeepSeekClient
 from Jev.guard import JevGuard
 from Knowledge.schemas import FOCUS_INSTRUCTIONS, KnowledgeActivity, KnowledgeDraft, KnowledgeEntry, KnowledgeSelection
 from Knowledge.store import KnowledgeStore
+from Knowledge.mysql_store import MySQLKnowledgeStore
+from Common.errors import DatabaseError
 from Common.schemas import JevCheck
 
 
@@ -25,9 +27,11 @@ answer（精简答案）、applicability（适用条件）、uncertainty（限�
 
 
 class KnowledgeService:
-    def __init__(self, settings: Settings, client: DeepSeekClient, guard: JevGuard):
+    def __init__(self, settings: Settings, client: DeepSeekClient, guard: JevGuard, database=None):
+        if settings.database_backend == "mysql" and database is None:
+            raise ValueError("MySQL 模式需要传入共享数据库连接池")
         self.settings, self.client, self.guard = settings, client, guard
-        self.store = KnowledgeStore(settings.knowledge_db_path)
+        self.store = MySQLKnowledgeStore(database) if database else KnowledgeStore(settings.knowledge_db_path)
 
     async def initialize(self):
         await run_in_threadpool(self.store.initialize)
@@ -45,7 +49,7 @@ class KnowledgeService:
             return selection, None
         except ChatError as error:
             return KnowledgeSelection(), error.code
-        except (sqlite3.Error, ValidationError, ValueError):
+        except (sqlite3.Error, DatabaseError, ValidationError, ValueError):
             return KnowledgeSelection(), "knowledge_lookup_failed"
 
     @staticmethod
@@ -102,6 +106,6 @@ class KnowledgeService:
             activity.status, activity.error_code = "error", error.code
         except (ValidationError, ValueError, TypeError):
             activity.status, activity.error_code = "error", "knowledge_invalid_entry"
-        except sqlite3.Error:
+        except (sqlite3.Error, DatabaseError):
             activity.status, activity.error_code = "error", "knowledge_write_failed"
         return activity

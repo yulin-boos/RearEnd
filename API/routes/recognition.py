@@ -1,11 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, Path, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Request, UploadFile
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
-from API.dependencies import get_service
+from API.dependencies import get_chat_service, get_service, optional_user
 from Common.schemas import ClassInfo, RecognitionResponse
+from Users.schemas import UserProfile
 from Visual.recognition.images import clean_filename
 from Visual.recognition.service import perform_recognition
 
@@ -22,6 +23,7 @@ def classes(request: Request):
 async def recognize(
     request: Request,
     file: Annotated[UploadFile, File(description="JPEG / PNG / WebP / BMP 图片")],
+    user: Annotated[UserProfile | None, Depends(optional_user)],
     confidence: Annotated[float | None, Form(ge=0, le=1, description="低于此阈值时标记为 uncertain")] = None,
     top_k: Annotated[int | None, Form(ge=1, le=50, description="返回候选数量，最多为实际类别数")] = None,
     save_result: Annotated[bool, Form(description="是否保存带识别文字的结果图片")] = True,
@@ -37,15 +39,17 @@ async def recognize(
             perform_recognition, settings, data, clean_filename(file.filename),
             settings.default_confidence if confidence is None else confidence,
             settings.default_top_k if top_k is None else top_k, save_result, service, request.app.state.chat,
+            user.id if user else None,
         )
-        result.chat = await request.app.state.chat.analyze(result.request_id, auto_analyze)
+        result.chat = await request.app.state.chat.analyze(result.request_id, auto_analyze, user.id if user else None)
         return result
     finally:
         await file.close()
 
 
 @router.get("/api/v1/results/{request_id}.jpg", summary="获取识别结果图片", response_class=FileResponse)
-def result_image(request: Request, request_id: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]):
+def result_image(request: Request, request_id: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
+                 user: Annotated[UserProfile | None, Depends(optional_user)]):
     settings = request.app.state.settings
     path = settings.result_dir / f"{request_id}.jpg"
     if not path.is_file():
@@ -53,5 +57,10 @@ def result_image(request: Request, request_id: Annotated[str, Path(pattern=r"^[0
     import time
     if path.stat().st_mtime < time.time() - settings.result_ttl_seconds:
         raise HTTPException(404, "结果图片已过期")
+    store = get_chat_service(request).store
+    if hasattr(store, "result_image_available"):
+        if not store.result_image_available(request_id, user.id if user else None):
+            raise HTTPException(404, "结果图片不存在或已过期")
+    else:
+        store.get(request_id, user.id if user else None)
     return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
-
