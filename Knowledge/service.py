@@ -42,7 +42,9 @@ class KnowledgeService:
 
     async def select(self, context: dict, history: list[dict], question: str) -> tuple[KnowledgeSelection, str | None]:
         top = context.get("top_prediction") or {}
-        lookup = " ".join([question, top.get("crop") or "", top.get("condition") or ""])
+        reported = context.get("reported_information") or {}
+        lookup = " ".join([question, reported.get("crop") or top.get("crop") or "",
+                           reported.get("symptoms") or "", top.get("condition") or ""])
         try:
             candidates = await run_in_threadpool(self.store.search, lookup, self.settings.knowledge_candidate_limit)
             selection = await self.guard.select_knowledge(context, history, question, candidates)

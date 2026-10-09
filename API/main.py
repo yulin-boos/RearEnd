@@ -7,7 +7,7 @@ from starlette.concurrency import run_in_threadpool
 
 from API.errors import register_error_handlers
 from API.middleware import UploadLimitMiddleware
-from API.routes import chat, health, knowledge, products, recognition, users
+from API.routes import chat, guidance, health, knowledge, products, recognition, users
 from Chat.deepseek import DeepSeekClient
 from Chat.service import ChatService
 from Common.config import Settings
@@ -58,7 +58,7 @@ def create_app(settings: Settings | None = None, service_factory: Callable = Yol
                 application.state.database = None
 
     application = FastAPI(
-        title="植物病虫害与农资商店 API", version="0.7.0",
+        title="植物病虫害与农资商店 API", version="0.8.0",
         description="先检查叶片并识别病害；Jev 检查话题和已有知识适用性，优先复用匹配问答，否则由 DeepSeek 回复，支持携带识别上下文的多轮对话。",
         lifespan=lifespan,
     )
@@ -74,6 +74,7 @@ def create_app(settings: Settings | None = None, service_factory: Callable = Yol
     application.include_router(health.router)
     application.include_router(recognition.router)
     application.include_router(chat.router)
+    application.include_router(guidance.router)
     application.include_router(knowledge.router)
     application.include_router(products.router)
     application.include_router(users.router)

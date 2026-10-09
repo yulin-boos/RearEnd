@@ -76,8 +76,12 @@ class ChatStore:
             history = json.loads(row["history"])
             history.extend([{"role": "user", "content": question}, {"role": "assistant", "content": reply}])
             history = history[-self.history_turns * 2:]
+            context = json.loads(row["context"])
+            if metadata and "guidance_state" in metadata:
+                context["guidance"] = metadata["guidance_state"]
             connection.execute(
-                "UPDATE conversations SET history = ?, revision = revision + 1, expires_at = ? WHERE recognition_id = ?",
-                (json.dumps(history, ensure_ascii=False), time.time() + self.ttl_seconds, recognition_id),
+                "UPDATE conversations SET context = ?, history = ?, revision = revision + 1, expires_at = ? WHERE recognition_id = ?",
+                (json.dumps(context, ensure_ascii=False), json.dumps(history, ensure_ascii=False),
+                 time.time() + self.ttl_seconds, recognition_id),
             )
         return len(history)

@@ -15,11 +15,14 @@ RearEnd/
 │       ├── health.py           健康检查
 │       ├── recognition.py      图片识别、类别列表及结果图片
 │       ├── chat.py             创建会话及发送问题
+│       ├── guidance.py         引导追问、补充信息及状态恢复
 │       ├── knowledge.py        知识库列表、搜索及详情
 │       ├── products.py         农资目录、分类和图片
 │       └── users.py            注册、登录、退出及个人资料
 ├── Chat/                       智能对话
 │   ├── service.py              首轮分析、多轮对话及知识复用
+│   ├── guidance.py             根据候选与补充信息更新问题及建议
+│   ├── guidance_schemas.py     引导请求、问题和响应结构
 │   ├── deepseek.py             DeepSeek 请求与响应处理
 │   ├── store.py                离线 SQLite 测试存储
 │   └── mysql_store.py          MySQL 会话、逐条消息及识别记录
@@ -66,6 +69,7 @@ RearEnd/
 │   ├── USERS_API.md           用户接口及前端接入说明
 │   ├── DATABASE_DESIGN.md     12 张表的设计及关系图
 │   ├── MYSQL_MIGRATION.md     MySQL 接入、备份和验证记录
+│   ├── GUIDANCE_API.md        引导问题、补充回答及前端调用流程
 │   ├── sql/                   初始建表定义
 │   └── verification/          历史模型验证记录
 ├── model/                     YOLO 与 CLIP 模型权重
@@ -112,6 +116,8 @@ RearEnd/
 - 配置示例：`Visual/.env.example`。
 
 模块与接口、模型行为的详细说明见 [后端接口说明](docs/BACKEND_API.md)。
+
+植物问题引导使用 `POST /api/v1/chat/guidance`：传入识别/会话 ID 生成最多 3 个追问，再携带 `revision` 和 `answers` 提交补充，返回更新的问题、分析及建议。状态和已回答信息保存在会话中，GET 可在重启后恢复。字段和调用示例见 [引导接口说明](docs/GUIDANCE_API.md)。
 
 用户注册、登录、退出和个人资料接口见 [用户接口说明](docs/USERS_API.md)。本地 `.env` 已配置远程数据库的专用应用账号和 TLS。MySQL 模式启动时校验表结构，连接失败不会回退到 SQLite 或 JSON。连接密码仅保存在被 Git 忽略的 `.env` 中。
 

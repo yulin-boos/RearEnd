@@ -2,6 +2,8 @@
 
 用户注册、登录、退出、个人资料及登录后聊天归属规则见 [用户接口说明](USERS_API.md)。
 
+根据识别候选、置信度和已回答信息生成结构化追问、补充后继续分析的接口见 [引导接口说明](GUIDANCE_API.md)：`POST /api/v1/chat/guidance` 生成或更新，`GET /api/v1/chat/guidance/{recognition_id}` 恢复状态。
+
 后端已按功能拆分到 `RearEnd/API`、`Chat`、`Jev`、`Knowledge`、`Common` 和 `Visual/recognition`。完整目录说明和统一启动方法见 [后端目录说明](../README.md)。启动、依赖安装和测试统一在 `RearEnd` 根目录执行。
 
 当前使用 `model/best.pt`：YOLO11 图片分类模型，训练输入尺寸为 **224×224**，支持 **38 个植物病害、叶螨危害及健康类别**。接口先检查叶片并识别病害，再结合识别结果分析和对话：优先复用适用的已有问答，否则由 DeepSeek 回复。TypeSafe Jev 检查问题、知识适用性和最终回复，只放行植物病因、症状及防治相关的交流。

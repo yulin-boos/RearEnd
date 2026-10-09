@@ -100,19 +100,24 @@ class MySQLChatStore:
             cursor.execute("INSERT INTO chat_messages (conversation_id,turn_no,role,content,created_at) VALUES (%s,%s,'user',%s,%s)",
                            (identifier, turn_no, question, now))
             cursor.execute("""INSERT INTO chat_messages
-                (conversation_id,turn_no,role,content,reply_source,model_name,elapsed_ms,usage_json,guard_checks,truncated,created_at)
-                VALUES (%s,%s,'assistant',%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (conversation_id,turn_no,role,content,reply_source,model_name,elapsed_ms,usage_json,guard_checks,knowledge_activity,truncated,created_at)
+                VALUES (%s,%s,'assistant',%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (identifier, turn_no, reply, metadata.get("source", "deepseek"), metadata.get("model"),
                  metadata.get("elapsed_ms"), json_text(metadata.get("usage", {})),
-                 json_text(metadata.get("guard")), metadata.get("truncated", False), now))
+                 json_text(metadata.get("guard")),
+                 json_text(metadata["knowledge_activity"]) if "knowledge_activity" in metadata else None,
+                 metadata.get("truncated", False), now))
             message_id = cursor.lastrowid
             for knowledge_id in set(metadata.get("source_ids", [])):
                 relation = "direct" if metadata.get("source") == "knowledge" else "reference"
                 cursor.execute("""INSERT INTO message_knowledge_links
                     (message_id,knowledge_id,relation_type,match_probability) VALUES (%s,%s,%s,%s)""",
                     (message_id, knowledge_id, relation, metadata.get("reuse_probability")))
-            cursor.execute("UPDATE conversations SET revision=%s,expires_at=%s,updated_at=%s WHERE id=%s",
-                           (turn_no, utc_datetime(time.time() + self.ttl_seconds), now, identifier))
+            context = json_value(row["context_snapshot"])
+            if "guidance_state" in metadata:
+                context["guidance"] = metadata["guidance_state"]
+            cursor.execute("UPDATE conversations SET context_snapshot=%s,revision=%s,expires_at=%s,updated_at=%s WHERE id=%s",
+                           (json_text(context), turn_no, utc_datetime(time.time() + self.ttl_seconds), now, identifier))
             cursor.execute("SELECT COUNT(*) AS total FROM chat_messages WHERE conversation_id=%s", (identifier,))
             total = cursor.fetchone()["total"]
         return min(total, self.history_turns * 2)

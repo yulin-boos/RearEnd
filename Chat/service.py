@@ -11,6 +11,7 @@ from Chat.store import ChatStore
 from Chat.mysql_store import MySQLChatStore
 from Common.config import Settings
 from Chat.deepseek import DeepSeekClient
+from Chat.guidance import GuidanceService
 from Jev.guard import JevGuard
 from Knowledge.service import KnowledgeService
 from Knowledge.schemas import KnowledgeActivity
@@ -47,6 +48,7 @@ class ChatService:
         self.store = MySQLChatStore(database, settings) if database else ChatStore(settings.chat_db_path, settings.chat_session_ttl_seconds, settings.chat_history_turns)
         self.locks = WeakValueDictionary()
         self.slots = asyncio.Semaphore(2)
+        self.guidance = GuidanceService(self)
 
     async def initialize(self):
         await run_in_threadpool(self.store.initialize)
@@ -97,6 +99,9 @@ class ChatService:
         async with lock:
             started = perf_counter()
             session = await run_in_threadpool(self.store.get, recognition_id, user_id)
+            guidance = session["context"].get("guidance")
+            if guidance:
+                session["context"]["reported_information"] = guidance["answered_information"]
             general = session["context"].get("conversation_type") == "general"
             question = question or ("请先询问我的植物和症状，以便开始植物健康咨询。" if general else OPENING_QUESTION)
             async with self.slots:

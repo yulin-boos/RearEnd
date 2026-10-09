@@ -269,6 +269,50 @@ def test_closed_idle_connection_is_replaced(database):
     database.check()
 
 
+def test_guidance_state_messages_and_restart_are_atomic(settings, database):
+    from tests.test_guidance import draft, guided_completion, question
+    def handler(request):
+        payload = json.loads(request.content)
+        source = json.loads(payload["messages"][0]["content"].split("本轮引导数据 JSON：\n")[1])
+        questions = [question("onset")] if source["answered_information"] else None
+        return httpx.Response(200, json=guided_completion(draft(questions)))
+    with TestClient(make_app(settings, handler)) as client:
+        owner = register(client)
+        response = client.post("/api/v1/recognize", headers=bearer(owner), files={"file": ("leaf.png", image_bytes())},
+                               data={"auto_analyze": "false", "confidence": 0.9, "save_result": "false"})
+        assert response.status_code == 200, response.text
+        identifier = response.json()["request_id"]
+        first = client.post("/api/v1/chat/guidance", headers=bearer(owner), json={"recognition_id": identifier})
+        assert first.status_code == 200, first.text
+        second = client.post("/api/v1/chat/guidance", headers=bearer(owner), json={"recognition_id": identifier,
+            "revision": 1, "answers": {"crop": "苹果", "symptoms": "褐色斑点"}})
+        assert second.status_code == 200, second.text
+        result = second.json()
+        with database.cursor() as cursor:
+            cursor.execute("SELECT context_snapshot,revision FROM conversations WHERE id=%s", (identifier,))
+            row = cursor.fetchone()
+            assert row["revision"] == 2 and json_value(row["context_snapshot"])["guidance"] == result
+            cursor.execute("SELECT role,guard_checks,knowledge_activity FROM chat_messages WHERE conversation_id=%s ORDER BY id", (identifier,))
+            rows = cursor.fetchall()
+            assert [row["role"] for row in rows] == ["user", "assistant", "user", "assistant"]
+            assert json_value(rows[-1]["guard_checks"])["reply"]["model"]
+            assert json_value(rows[-1]["knowledge_activity"])["status"] == "skipped"
+        # A stale writer must roll back its message pair and new context together.
+        with pytest.raises(ChatError):
+            client.app.state.chat.store.append_turn(identifier, 0, "过期补充", "过期引导", owner["user"]["id"],
+                                                     {"guidance_state": {"incorrect": True}})
+        assert client.get("/api/v1/chat/guidance/" + identifier, headers=bearer(owner)).json() == result
+        assert client.get("/api/v1/chat/guidance/" + identifier).status_code == 404
+    with TestClient(make_app(settings, handler)) as client:
+        assert client.get("/api/v1/chat/guidance/" + identifier, headers=bearer(owner)).json() == result
+        conflict = client.post("/api/v1/chat/guidance", headers=bearer(owner), json={"recognition_id": identifier,
+            "revision": 1, "answers": {"onset": "三天"}})
+        assert conflict.status_code == 409
+        with database.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) AS total FROM chat_messages WHERE conversation_id=%s", (identifier,))
+            assert cursor.fetchone()["total"] == 4
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(os.getenv("YOLO_TEST_REAL_MODEL") != "1", reason="Set YOLO_TEST_REAL_MODEL=1 for local weights")
 def test_real_models_save_mysql_recognition(settings, database):
